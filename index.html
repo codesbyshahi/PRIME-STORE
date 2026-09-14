@@ -338,7 +338,13 @@ function go(pg,pd){if(pd)S.pd=pd;S.pg=pg;S.co=0;S.menu=0;S.mobm=0;if(pg!=='shop'
 function doSearch(v){S.q=v;if(S.pg!=='shop')S.pg='shop';R();setTimeout(function(){var el=document.getElementById('s-inp');if(el){el.focus();el.setSelectionRange(v.length,v.length);}},50);}
 function notify(m){S.ts=m;R();setTimeout(()=>{S.ts='';R();},2600);}
 function addC(p,sz,cl,qt){const e=S.cart.find(i=>i.id===p.id&&i.sz===sz&&i.cl===cl);if(e)e.qty+=qt;else S.cart.push({...p,sz,cl,qty:qt});notify('✓ '+p.n+' added to bag');}
-function logout(){S.usr=null;notify('Logged out successfully');go('home');}
+function logout(){S.usr=null;if(FB&&fbA)fbA.signOut();notify('Logged out successfully');go('home');}
+function adminAuth(){
+  if(!FB||!fbA)return;
+  fbA.signInWithEmailAndPassword('admin@shahihoodies.com','jaishreekrishnaji').catch(function(){
+    fbA.createUserWithEmailAndPassword('admin@shahihoodies.com','jaishreekrishnaji').catch(function(e){console.warn('Admin auth:',e);});
+  });
+}
 var _mp=false;
 function toggleMusic(){var a=document.getElementById('bg-audio');if(!a)return;if(a.paused){a.play().then(function(){_mp=true;R();}).catch(function(){});} else{a.pause();_mp=false;R();}}
 function delProd(id){S.products=S.products.filter(x=>x.id!==id);delDB('products',id);notify('Product deleted');R();}
@@ -348,6 +354,39 @@ function delCoup(id){S.cp=S.cp.filter(x=>x.id!==id);delDB('coupons',id);notify('
 function gImg(p){return(p.imgs&&p.imgs.length)?p.imgs[0]:p.img||'';}
 function tStk(p){if(p.stk)return Object.values(p.stk).reduce((a,b)=>a+b,0);return p.st||0;}
 function rmCart(idx){S.cart.splice(idx,1);R();}
+function saveProd(){
+  var n=document.getElementById('mp-n').value;
+  var p=+document.getElementById('mp-p').value;
+  var m=+document.getElementById('mp-m').value;
+  var c=document.getElementById('mp-c').value;
+  var imgEl=document.getElementById('mp-imgs');
+  var imgsRaw=imgEl?imgEl.value.split('\n').map(function(s){return s.trim();}).filter(function(s){return s;}):[]; 
+  var vidEl=document.getElementById('mp-vid');
+  var vid=vidEl?vidEl.value.trim():'';
+  var sz=document.getElementById('mp-sz').value.split(',').map(function(s){return s.trim();}).filter(function(s){return s;});
+  var d=document.getElementById('mp-d').value;
+  var sp=document.getElementById('mp-sp').value;
+  var stk={};
+  document.querySelectorAll('#mp-stk input').forEach(function(el){if(el.value)stk[el.dataset.sz]=+el.value;});
+  var totalSt=Object.values(stk).reduce(function(a,b){return a+b;},0);
+  if(!n||!p||!m){notify('Please fill Name, Price & MRP');return;}
+  var label=c==='men'?"Men's":c==='women'?"Women's":"Kids";
+  var ep=window._ep;
+  var prod={n:n,p:p,m:m,c:c,l:label,sz:sz,cl:['#111','#F5F0E8'],cn:['Black','Cream'],r:ep?ep.r:4.0,rv:ep?ep.rv:0,d:d||'Premium hoodie',sp:sp||'Premium Cotton',sh:'Free above ₹999',img:imgsRaw[0]||'',imgs:imgsRaw,vid:vid,st:totalSt||0,stk:stk,b:ep?ep.b:0};
+  if(ep){Object.assign(ep,prod);saveDB('products',ep.id,ep);notify('Product updated!');}
+  else{prod.id=Date.now();S.products.push(prod);saveDB('products',prod.id,prod);notify('Product added!');}
+  window._modal=null;window._ep=null;R();
+}
+function saveCoup(){
+  var cd=document.getElementById('mc-cd').value.toUpperCase();
+  var tp=document.getElementById('mc-tp').value;
+  var v=+document.getElementById('mc-v').value;
+  var mn=+document.getElementById('mc-mn').value;
+  if(!cd||!v||!mn){notify('Please fill all fields');return;}
+  var nc={id:Date.now(),code:cd,tp:tp,v:v,mn:mn,mx:v,on:1,u:0};
+  S.cp.push(nc);saveDB('coupons',nc.id,nc);
+  window._modal=null;notify('Coupon created!');R();
+}
 
 // ═══ FIREBASE ═══
 var FB=false,db=null,fbA=null;
@@ -360,7 +399,7 @@ function initFB(){
     if(!firebase.apps.length)firebase.initializeApp(FB_CFG);
     db=firebase.firestore();fbA=firebase.auth();FB=true;
     loadDB();
-    fbA.onAuthStateChanged(function(u){if(u){S.usr={name:u.displayName||u.email.split('@')[0],email:u.email,role:u.email==='admin'?'admin':'customer',uid:u.uid};R();}});
+    fbA.onAuthStateChanged(function(u){if(u){S.usr={name:u.displayName||'Admin',email:u.email,role:(u.email==='admin'||u.email==='admin@shahihoodies.com')?'admin':'customer',uid:u.uid};R();}});
     console.log('🔥 Firebase connected!');
   }catch(e){console.warn('Firebase:',e);}
 }
@@ -446,7 +485,7 @@ function wishlist(){const it=S.products.filter(p=>S.wl.includes(p.id));return`<d
 
 function legal(t,c){return`<div style="min-height:100vh;background:var(--bg)"><div style="max-width:760px;margin:0 auto;padding:36px 24px"><div class="bc"><button onclick="go('home')">Home</button><span>›</span><span>${t}</span></div><h1 class="pf" style="font-size:30px;margin-bottom:24px">${t}</h1><div style="background:var(--w);border:1px solid var(--bd);border-radius:16px;padding:32px;font-size:14px;line-height:1.9;color:var(--tx);white-space:pre-line">${c}</div></div></div>`;}
 
-function login(){const il=window._lm!==false;return`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(135deg,#F5F0E5,#E8E0D0)"><div style="width:100%;max-width:400px"><div style="text-align:center;margin-bottom:28px"><h1 class="pf" style="font-size:32px">${il?'Welcome Back':'Join SHAHI'}</h1><p style="font-size:14px;color:var(--txl);margin-top:8px">${il?'Sign in to your account':'Create your free account today'}</p></div><div style="background:var(--w);border:1px solid var(--bd);border-radius:20px;padding:28px;box-shadow:0 10px 40px rgba(0,0,0,.06)"><div style="display:flex;border:2px solid var(--bd);border-radius:12px;overflow:hidden;margin-bottom:20px"><button onclick="window._lm=true;R()" style="flex:1;padding:12px 0;font-size:14px;font-weight:700;border:none;cursor:pointer;background:${il?'var(--g)':'transparent'};color:${il?'#fff':'var(--txl)'};transition:all .2s">Login</button><button onclick="window._lm=false;R()" style="flex:1;padding:12px 0;font-size:14px;font-weight:700;border:none;cursor:pointer;background:${!il?'var(--g)':'transparent'};color:${!il?'#fff':'var(--txl)'};transition:all .2s">Sign Up</button></div><div style="display:flex;flex-direction:column;gap:12px">${!il?'<div><label class="fi-label">Full Name</label><input id="lg-n" class="fi" placeholder="Enter your name"></div>':''}<div><label class="fi-label">${il?'Username or Email':'Email Address'}</label><input id="lg-e" class="fi" placeholder="${il?'Enter username or email':'your@email.com'}"></div>${!il?'<div><label class="fi-label">Phone Number</label><input id="lg-ph" class="fi" placeholder="+91 98765 43210"></div>':''}<div><label class="fi-label">Password</label><input id="lg-pw" class="fi" type="password" placeholder="Enter password"></div><button class="btn btn-g" style="width:100%;justify-content:center;padding:14px 0;font-size:15px;margin-top:6px;border-radius:14px" onclick="var e=document.getElementById('lg-e').value,pw=document.getElementById('lg-pw').value;if(${il}){if(e==='admin'&&pw==='jaishreekrishnaji'){S.usr={name:'Admin',email:'admin',role:'admin'};notify('Jai Shree Krishna 🙏 Welcome Admin!');go('admin');}else if(e&&pw){S.usr={name:e.split('@')[0],email:e,role:'customer'};notify('Welcome back!');go('home');}else notify('Please fill all fields');}else{var n=document.getElementById('lg-n')?.value;if(n&&e&&pw){S.usr={name:n,email:e,role:'customer'};notify('Account created! 🎉');go('home');}else notify('Please fill all fields');}">${il?'Sign In →':'Create Account →'}</button></div></div></div></div>`;}
+function login(){const il=window._lm!==false;return`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(135deg,#F5F0E5,#E8E0D0)"><div style="width:100%;max-width:400px"><div style="text-align:center;margin-bottom:28px"><h1 class="pf" style="font-size:32px">${il?'Welcome Back':'Join SHAHI'}</h1><p style="font-size:14px;color:var(--txl);margin-top:8px">${il?'Sign in to your account':'Create your free account today'}</p></div><div style="background:var(--w);border:1px solid var(--bd);border-radius:20px;padding:28px;box-shadow:0 10px 40px rgba(0,0,0,.06)"><div style="display:flex;border:2px solid var(--bd);border-radius:12px;overflow:hidden;margin-bottom:20px"><button onclick="window._lm=true;R()" style="flex:1;padding:12px 0;font-size:14px;font-weight:700;border:none;cursor:pointer;background:${il?'var(--g)':'transparent'};color:${il?'#fff':'var(--txl)'};transition:all .2s">Login</button><button onclick="window._lm=false;R()" style="flex:1;padding:12px 0;font-size:14px;font-weight:700;border:none;cursor:pointer;background:${!il?'var(--g)':'transparent'};color:${!il?'#fff':'var(--txl)'};transition:all .2s">Sign Up</button></div><div style="display:flex;flex-direction:column;gap:12px">${!il?'<div><label class="fi-label">Full Name</label><input id="lg-n" class="fi" placeholder="Enter your name"></div>':''}<div><label class="fi-label">${il?'Username or Email':'Email Address'}</label><input id="lg-e" class="fi" placeholder="${il?'Enter username or email':'your@email.com'}"></div>${!il?'<div><label class="fi-label">Phone Number</label><input id="lg-ph" class="fi" placeholder="+91 98765 43210"></div>':''}<div><label class="fi-label">Password</label><input id="lg-pw" class="fi" type="password" placeholder="Enter password"></div><button class="btn btn-g" style="width:100%;justify-content:center;padding:14px 0;font-size:15px;margin-top:6px;border-radius:14px" onclick="var e=document.getElementById('lg-e').value,pw=document.getElementById('lg-pw').value;if(${il}){if(e==='admin'&&pw==='jaishreekrishnaji'){S.usr={name:'Admin',email:'admin',role:'admin'};adminAuth();notify('Jai Shree Krishna 🙏 Welcome Admin!');go('admin');}else if(e&&pw){S.usr={name:e.split('@')[0],email:e,role:'customer'};notify('Welcome back!');go('home');}else notify('Please fill all fields');}else{var n=document.getElementById('lg-n')?.value;if(n&&e&&pw){S.usr={name:n,email:e,role:'customer'};notify('Account created! 🎉');go('home');}else notify('Please fill all fields');}">${il?'Sign In →':'Create Account →'}</button></div></div></div></div>`;}
 
 // ADMIN
 function admin(){if(!S.usr||S.usr.role!=='admin')return`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);gap:14px"><span style="font-size:52px">🔐</span><p style="color:var(--txl);font-size:15px">Admin access required</p><button class="btn btn-g" onclick="go('login')">Login as Admin</button></div>`;
@@ -518,9 +557,9 @@ if(m==='prod'){const ep=window._ep;const imgs=ep&&ep.imgs?ep.imgs:[];const szLis
 <div style="background:var(--cream);border:1px solid var(--bd);border-radius:12px;padding:16px"><label class="fi-label">📦 Stock Per Size</label><p style="font-size:11px;color:var(--txl);margin-bottom:10px">Enter quantity for each size</p><div id="mp-stk" style="display:flex;flex-wrap:wrap;gap:8px">${szList.map(s=>'<div style="display:flex;flex-direction:column;align-items:center;gap:4px"><span style="font-size:11px;font-weight:700;color:var(--g)">'+s+'</span><input class="fi" type="number" data-sz="'+s+'" style="width:60px;text-align:center;padding:8px 4px" placeholder="0" value="'+(stkMap[s]||ep&&ep.st?Math.round((ep?.st||50)/szList.length):'')+'"></div>').join('')}</div></div>
 <div><label class="fi-label">Description</label><textarea id="mp-d" class="fi" rows="3" style="resize:none" placeholder="Describe your product...">${ep?ep.d:''}</textarea></div>
 <div><label class="fi-label">Specifications</label><input id="mp-sp" class="fi" placeholder="Material · Weight · Fit type" value="${ep?ep.sp:''}"></div>
-<button class="btn btn-g" style="width:100%;justify-content:center;padding:14px 0;margin-top:4px;font-size:15px;border-radius:14px" onclick="var n=document.getElementById('mp-n').value,p=+document.getElementById('mp-p').value,m=+document.getElementById('mp-m').value,c=document.getElementById('mp-c').value;var imgsRaw=document.getElementById('mp-imgs').value.split('\\n').map(s=>s.trim()).filter(s=>s);var vid=document.getElementById('mp-vid').value.trim();var sz=document.getElementById('mp-sz').value.split(',').map(s=>s.trim()).filter(s=>s);var d=document.getElementById('mp-d').value,sp=document.getElementById('mp-sp').value;var stk={};document.querySelectorAll('#mp-stk input').forEach(function(el){if(el.value)stk[el.dataset.sz]=+el.value;});var totalSt=Object.values(stk).reduce(function(a,b){return a+b},0);if(!n||!p||!m){notify('Please fill Name, Price & MRP');return;}var prod={n:n,p:p,m:m,c:c,l:c==='men'?'Men\\'s':c==='women'?'Women\\'s':'Kids',sz:sz,cl:['#111','#F5F0E8'],cn:['Black','Cream'],r:ep?ep.r:4.0,rv:ep?ep.rv:0,d:d||'Premium hoodie',sp:sp||'Premium Cotton',sh:'Free above ₹999',img:imgsRaw[0]||'',imgs:imgsRaw,vid:vid,st:totalSt||0,stk:stk,b:ep?ep.b:0};if(window._ep){Object.assign(window._ep,prod);saveDB('products',window._ep.id,window._ep);notify('Product updated!');}else{prod.id=Date.now();S.products.push(prod);saveDB('products',prod.id,prod);notify('Product added!');}window._modal=null;window._ep=null;R()">${ep?'Update Product':'Add Product'}</button></div></div></div>`;}
+<button class="btn btn-g" style="width:100%;justify-content:center;padding:14px 0;margin-top:4px;font-size:15px;border-radius:14px" onclick="saveProd()">${ep?"Update Product":"Add Product"}</button></div></div></div>`;}
 
-if(m==='coup'){return`<div class="modal-ov"><div class="modal" style="max-width:420px"><div class="modal-hd"><b class="pf" style="font-size:22px">Create Coupon</b><button class="modal-close" onclick="window._modal=null;R()">✕</button></div><div style="display:flex;flex-direction:column;gap:14px"><div><label class="fi-label">Coupon Code *</label><input id="mc-cd" class="fi" placeholder="e.g. SUMMER20" style="text-transform:uppercase;letter-spacing:2px;font-weight:700"></div><div><label class="fi-label">Discount Type *</label><select id="mc-tp" class="fi"><option value="p">Percentage Off (%)</option><option value="f">Flat Amount Off (₹)</option></select></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><label class="fi-label">Discount Value *</label><input id="mc-v" class="fi" type="number" placeholder="10"></div><div><label class="fi-label">Minimum Order (₹) *</label><input id="mc-mn" class="fi" type="number" placeholder="999"></div></div><button class="btn btn-g" style="width:100%;justify-content:center;padding:14px 0;font-size:15px;border-radius:14px" onclick="var cd=document.getElementById('mc-cd').value.toUpperCase(),tp=document.getElementById('mc-tp').value,v=+document.getElementById('mc-v').value,mn=+document.getElementById('mc-mn').value;if(!cd||!v||!mn){notify('Please fill all fields');return;}var nc={id:Date.now(),code:cd,tp:tp,v:v,mn:mn,mx:v,on:1,u:0};S.cp.push(nc);saveDB('coupons',nc.id,nc);window._modal=null;notify('Coupon created!');R()">Create Coupon</button></div></div></div>`;}
+if(m==='coup'){return`<div class="modal-ov"><div class="modal" style="max-width:420px"><div class="modal-hd"><b class="pf" style="font-size:22px">Create Coupon</b><button class="modal-close" onclick="window._modal=null;R()">✕</button></div><div style="display:flex;flex-direction:column;gap:14px"><div><label class="fi-label">Coupon Code *</label><input id="mc-cd" class="fi" placeholder="e.g. SUMMER20" style="text-transform:uppercase;letter-spacing:2px;font-weight:700"></div><div><label class="fi-label">Discount Type *</label><select id="mc-tp" class="fi"><option value="p">Percentage Off (%)</option><option value="f">Flat Amount Off (₹)</option></select></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div><label class="fi-label">Discount Value *</label><input id="mc-v" class="fi" type="number" placeholder="10"></div><div><label class="fi-label">Minimum Order (₹) *</label><input id="mc-mn" class="fi" type="number" placeholder="999"></div></div><button class="btn btn-g" style="width:100%;justify-content:center;padding:14px 0;font-size:15px;border-radius:14px" onclick="saveCoup()">Create Coupon</button></div></div></div>`;}
 return'';}
 
 // FOOTER
