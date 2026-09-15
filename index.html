@@ -359,7 +359,7 @@ function unlockPay(){
   else{notify('Wrong password!');}
 }
 function toggleMusic(){var a=document.getElementById('bg-audio');if(!a)return;if(a.paused){a.play().then(function(){_mp=true;R();}).catch(function(){});} else{a.pause();_mp=false;R();}}
-function delProd(id){id=String(id);S.products=S.products.filter(function(x){return String(x.id)!==id;});delDB('products',id);notify('Product deleted');R();}
+function delProd(id){id=String(id);console.log('🗑️ Deleting product:',id);var before=S.products.length;S.products=S.products.filter(function(x){return String(x.id)!==id;});console.log('Products: '+before+' → '+S.products.length);delDB('products',id);notify('Product deleted');R();}
 function setMImg(u){document.getElementById('pd-main-img').innerHTML='<img src="'+u+'" style="width:100%;aspect-ratio:3/4;object-fit:cover">';}
 function setMVid(u){document.getElementById('pd-main-img').innerHTML='<video src="'+u+'" controls style="width:100%;aspect-ratio:3/4;object-fit:cover"></video>';}
 function delCoup(id){id=String(id);S.cp=S.cp.filter(function(x){return String(x.id)!==id;});delDB('coupons',id);notify('Coupon deleted');R();}
@@ -445,9 +445,9 @@ async function loadDB(){
       S.products=ps.docs.map(d=>({...d.data(),id:d.id}));
       console.log('✅ Loaded '+ps.size+' products from Firebase');
     }else{
-      console.log('📤 Firestore empty — syncing default products...');
-      S.products.forEach(function(p){saveDB('products',p.id,p);});
-      console.log('✅ '+S.products.length+' products synced to Firebase');
+      console.log('📤 Firebase empty — auto-syncing products...');
+      for(var i=0;i<S.products.length;i++){await db.collection('products').doc(String(S.products[i].id)).set(S.products[i]);}
+      console.log('✅ '+S.products.length+' products synced!');
     }
     var os=await db.collection('orders').get();
     if(!os.empty){S.ord=os.docs.map(d=>d.data()).sort(function(a,b){return(b.ts||0)-(a.ts||0);});console.log('✅ Loaded '+os.size+' orders');}
@@ -455,16 +455,17 @@ async function loadDB(){
     if(!cs.empty){
       S.cp=cs.docs.map(d=>({...d.data(),id:d.id}));console.log('✅ Loaded '+cs.size+' coupons');
     }else{
-      S.cp.forEach(function(c){saveDB('coupons',c.id,c);});
-      console.log('✅ Default coupons synced');
+      for(var j=0;j<S.cp.length;j++){await db.collection('coupons').doc(String(S.cp[j].id)).set(S.cp[j]);}
+      console.log('✅ Coupons synced!');
     }
     var ts=await db.collection('settings').doc('theme').get();
     if(ts.exists){Object.assign(TH,ts.data());console.log('✅ Loaded theme');}
+    else{await db.collection('settings').doc('theme').set(TH);console.log('✅ Theme synced!');}
     R();console.log('🔥 All data loaded from Firebase!');
-  }catch(e){console.warn('❌ Load error:',e);}
+  }catch(e){console.error('❌ Load error:',e);}
 }
-function saveDB(c,id,d){if(FB)db.collection(c).doc(String(id)).set(d,{merge:true}).catch(e=>console.warn(e));}
-function delDB(c,id){if(FB)db.collection(c).doc(String(id)).delete().catch(e=>console.warn(e));}
+function saveDB(c,id,d){if(!FB||!db){console.warn('saveDB skipped — FB not ready');return;}db.collection(c).doc(String(id)).set(d,{merge:true}).then(function(){console.log('✅ Saved to '+c+'/'+id);}).catch(function(e){console.error('❌ Save failed:',c,id,e);});}
+function delDB(c,id){if(!FB||!db){console.warn('delDB skipped — FB not ready');return;}db.collection(c).doc(String(id)).delete().then(function(){console.log('✅ Deleted '+c+'/'+id);}).catch(function(e){console.error('❌ Delete failed:',c,id,e);});}
 function saveTH(){if(FB)saveDB('settings','theme',TH);}
 async function fbLogin(e,pw){
   if(!FB){S.usr={name:e==='admin'?'Admin':e.split('@')[0],email:e,role:e==='admin'?'admin':'customer'};return true;}
