@@ -294,7 +294,6 @@ a{text-decoration:none;color:inherit}
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script>
 const P=[
 {id:1,n:"Essential Noir Hoodie",p:1299,m:2499,c:"men",l:"Men's",sz:["S","M","L","XL","XXL"],cl:["#111","#F5F0E8","#2C3E50"],cn:["Black","Ivory","Navy"],r:4.7,rv:234,d:"400 GSM premium cotton with brushed fleece lining. Double-stitched seams for durability that lasts.",sp:"100% Combed Cotton · 400 GSM · Regular Fit · Machine Wash Cold · Pre-shrunk",sh:"Free above ₹999 · Metro 2-3 days · Tier 2 cities 3-5 days · COD available ₹49",img:"https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=500&h=600&fit=crop",b:1,st:50},
@@ -343,13 +342,7 @@ function go(pg,pd){if(pd)S.pd=pd;S.pg=pg;S.co=0;S.menu=0;S.mobm=0;if(pg!=='shop'
 function doSearch(v){S.q=v;if(S.pg!=='shop')S.pg='shop';R();setTimeout(function(){var el=document.getElementById('s-inp');if(el){el.focus();el.setSelectionRange(v.length,v.length);}},50);}
 function notify(m){S.ts=m;R();setTimeout(()=>{S.ts='';R();},2600);}
 function addC(p,sz,cl,qt){const e=S.cart.find(i=>i.id===p.id&&i.sz===sz&&i.cl===cl);if(e)e.qty+=qt;else S.cart.push({...p,sz,cl,qty:qt});notify('✓ '+p.n+' added to bag');}
-function logout(){S.usr=null;if(FB&&fbA)fbA.signOut();notify('Logged out successfully');go('home');}
-function adminAuth(){
-  if(!FB||!fbA)return;
-  fbA.signInWithEmailAndPassword('admin@shahihoodies.com','jaishreekrishnaji').catch(function(){
-    fbA.createUserWithEmailAndPassword('admin@shahihoodies.com','jaishreekrishnaji').catch(function(e){console.warn('Admin auth:',e);});
-  });
-}
+function logout(){S.usr=null;notify('Logged out');go('home');}
 var _mp=false;
 var PAY_PASS='shahi@payments';
 var _payUnlocked=false;
@@ -423,64 +416,48 @@ function completeOrder(name,phone,payMethod){
   S.ord.unshift(o);saveDB('orders',o.id,o);S.cart=[];S.ac=null;S._lo=o;go('done');
 }
 
-// ═══ FIREBASE ═══
-var FB=false,db=null,fbA=null;
+// ═══ FIREBASE (Simple — like IMS) ═══
+var FB=false,db=null;
 var FB_CFG={apiKey:"AIzaSyAQ1saoo6jBU7axipzuVlHSFZV9ZrHmVII",authDomain:"prime-store-654f4.firebaseapp.com",projectId:"prime-store-654f4",storageBucket:"prime-store-654f4.firebasestorage.app",messagingSenderId:"81743908752",appId:"1:81743908752:web:c31777b71d204e2716ed15"};
 
 function initFB(){
-  if(!FB_CFG.apiKey||FB_CFG.apiKey==='YOUR_API_KEY')return;
   try{
-    if(typeof firebase==='undefined'){console.log('Firebase SDK not loaded yet');return;}
+    if(typeof firebase==='undefined')return;
     if(!firebase.apps.length)firebase.initializeApp(FB_CFG);
-    db=firebase.firestore();fbA=firebase.auth();FB=true;
+    db=firebase.firestore();FB=true;
     loadDB();
-    fbA.onAuthStateChanged(function(u){if(u){S.usr={name:u.displayName||'Admin',email:u.email,role:(u.email==='admin'||u.email==='admin@shahihoodies.com')?'admin':'customer',uid:u.uid};R();}});
     console.log('🔥 Firebase connected!');
-  }catch(e){console.warn('Firebase:',e);}
+  }catch(e){console.error('Firebase init error:',e);}
 }
 async function loadDB(){
-  if(!FB)return;try{
+  if(!FB||!db)return;try{
     var initDoc=await db.collection('settings').doc('init').get();
     var firstTime=!initDoc.exists;
     var ps=await db.collection('products').get();
     if(!ps.empty){
-      S.products=ps.docs.map(d=>({...d.data(),id:d.id}));
-      console.log('✅ Loaded '+ps.size+' products from Firebase');
+      S.products=ps.docs.map(function(d){var data=d.data();data.id=d.id;return data;});
+      console.log('✅ Loaded '+ps.size+' products');
     }else if(firstTime){
-      console.log('📤 First time — syncing default products...');
+      console.log('📤 First sync...');
       for(var i=0;i<S.products.length;i++){await db.collection('products').doc(String(S.products[i].id)).set(S.products[i]);}
-      console.log('✅ '+S.products.length+' products synced!');
-    }else{
-      S.products=[];
-      console.log('📭 No products in Firebase (all deleted)');
-    }
+      console.log('✅ '+S.products.length+' products synced');
+    }else{S.products=[];console.log('📭 No products');}
     var os=await db.collection('orders').get();
-    if(!os.empty){S.ord=os.docs.map(d=>d.data()).sort(function(a,b){return(b.ts||0)-(a.ts||0);});console.log('✅ Loaded '+os.size+' orders');}
+    if(!os.empty){S.ord=os.docs.map(function(d){return d.data();}).sort(function(a,b){return(b.ts||0)-(a.ts||0);});console.log('✅ Loaded '+os.size+' orders');}
     var cs=await db.collection('coupons').get();
-    if(!cs.empty){
-      S.cp=cs.docs.map(d=>({...d.data(),id:d.id}));console.log('✅ Loaded '+cs.size+' coupons');
-    }else if(firstTime){
-      for(var j=0;j<S.cp.length;j++){await db.collection('coupons').doc(String(S.cp[j].id)).set(S.cp[j]);}
-      console.log('✅ Coupons synced!');
-    }else{S.cp=[];console.log('📭 No coupons');}
+    if(!cs.empty){S.cp=cs.docs.map(function(d){var data=d.data();data.id=d.id;return data;});console.log('✅ Loaded '+cs.size+' coupons');}
+    else if(firstTime){for(var j=0;j<S.cp.length;j++){await db.collection('coupons').doc(String(S.cp[j].id)).set(S.cp[j]);}}
+    else{S.cp=[];}
     var ts=await db.collection('settings').doc('theme').get();
     if(ts.exists){Object.assign(TH,ts.data());console.log('✅ Loaded theme');}
-    else if(firstTime){await db.collection('settings').doc('theme').set(TH);console.log('✅ Theme synced!');}
-    if(firstTime){await db.collection('settings').doc('init').set({done:true,ts:Date.now()});console.log('✅ Init flag set');}
-    R();console.log('🔥 All data loaded from Firebase!');
+    else if(firstTime){await db.collection('settings').doc('theme').set(TH);}
+    if(firstTime){await db.collection('settings').doc('init').set({done:true,ts:Date.now()});console.log('✅ Init complete');}
+    R();console.log('🔥 All data loaded!');
   }catch(e){console.error('❌ Load error:',e);}
 }
-function saveDB(c,id,d){if(!FB||!db){console.warn('saveDB skipped — FB not ready');return;}db.collection(c).doc(String(id)).set(d,{merge:true}).then(function(){console.log('✅ Saved to '+c+'/'+id);}).catch(function(e){console.error('❌ Save failed:',c,id,e);});}
-function delDB(c,id){if(!FB||!db){console.warn('delDB skipped — FB not ready');return;}db.collection(c).doc(String(id)).delete().then(function(){console.log('✅ Deleted '+c+'/'+id);}).catch(function(e){console.error('❌ Delete failed:',c,id,e);});}
-function saveTH(){if(FB)saveDB('settings','theme',TH);}
-async function fbLogin(e,pw){
-  if(!FB){S.usr={name:e==='admin'?'Admin':e.split('@')[0],email:e,role:e==='admin'?'admin':'customer'};return true;}
-  try{await fbA.signInWithEmailAndPassword(e,pw);return true;}catch(err){notify(err.message);return false;}
-}
-async function fbSignup(e,pw,nm){
-  if(!FB){S.usr={name:nm||e.split('@')[0],email:e,role:'customer'};return true;}
-  try{var cr=await fbA.createUserWithEmailAndPassword(e,pw);if(nm)await cr.user.updateProfile({displayName:nm});return true;}catch(err){notify(err.message);return false;}
-}
+function saveDB(c,id,d){if(!FB||!db)return;db.collection(c).doc(String(id)).set(d,{merge:true}).then(function(){console.log('✅ Saved '+c+'/'+id);}).catch(function(e){console.error('❌ Save fail:',e);});}
+function delDB(c,id){if(!FB||!db)return;db.collection(c).doc(String(id)).delete().then(function(){console.log('✅ Deleted '+c+'/'+id);}).catch(function(e){console.error('❌ Del fail:',e);});}
+function saveTH(){if(FB&&db)db.collection('settings').doc('theme').set(TH).catch(function(e){console.error(e);});}
 
 function pcard(p){const o=poff(p),w=S.wl.includes(String(p.id));return`<div class="pcard" onclick="go('product',S.products.find(function(x){return String(x.id)==='${p.id}';}))"><div class="iw">${img(gImg(p),'width:100%;aspect-ratio:3/4;object-fit:cover')}${o>0?`<div class="tg" style="background:rgba(27,67,50,.85)">-${o}%</div>`:''}${p.b?`<div class="tg" style="background:rgba(200,169,110,.9);top:${o>0?38:12}px">BESTSELLER</div>`:''}<button class="wb" onclick="event.stopPropagation();var pid='${p.id}';if(S.wl.includes(pid))S.wl=S.wl.filter(function(i){return i!==pid;});else S.wl.push(pid);R()" style="color:${w?'#e53e3e':'#bbb'}">${w?'♥':'♡'}</button><div class="qv"><button class="btn btn-g" style="width:100%;justify-content:center;padding:10px 0;font-size:12px;backdrop-filter:blur(8px);background:rgba(27,67,50,.9)">Quick View →</button></div></div><div style="padding:0 4px"><div class="lb">${p.l}</div><div class="nm">${p.n}</div><div class="pr"><b>₹${p.p.toLocaleString()}</b><s>₹${p.m.toLocaleString()}</s></div><div class="sr">${stars(p.r,11)}<span>(${p.rv})</span></div></div></div>`;}
 
@@ -552,7 +529,7 @@ function wishlist(){const it=S.products.filter(p=>S.wl.includes(p.id));return`<d
 
 function legal(t,c){return`<div style="min-height:100vh;background:var(--bg)"><div style="max-width:760px;margin:0 auto;padding:36px 24px"><div class="bc"><button onclick="go('home')">Home</button><span>›</span><span>${t}</span></div><h1 class="pf" style="font-size:30px;margin-bottom:24px">${t}</h1><div style="background:var(--w);border:1px solid var(--bd);border-radius:16px;padding:32px;font-size:14px;line-height:1.9;color:var(--tx);white-space:pre-line">${c}</div></div></div>`;}
 
-function login(){const il=window._lm!==false;return`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(135deg,#F5F0E5,#E8E0D0)"><div style="width:100%;max-width:400px"><div style="text-align:center;margin-bottom:28px"><h1 class="pf" style="font-size:32px">${il?'Welcome Back':'Join SHAHI'}</h1><p style="font-size:14px;color:var(--txl);margin-top:8px">${il?'Sign in to your account':'Create your free account today'}</p></div><div style="background:var(--w);border:1px solid var(--bd);border-radius:20px;padding:28px;box-shadow:0 10px 40px rgba(0,0,0,.06)"><div style="display:flex;border:2px solid var(--bd);border-radius:12px;overflow:hidden;margin-bottom:20px"><button onclick="window._lm=true;R()" style="flex:1;padding:12px 0;font-size:14px;font-weight:700;border:none;cursor:pointer;background:${il?'var(--g)':'transparent'};color:${il?'#fff':'var(--txl)'};transition:all .2s">Login</button><button onclick="window._lm=false;R()" style="flex:1;padding:12px 0;font-size:14px;font-weight:700;border:none;cursor:pointer;background:${!il?'var(--g)':'transparent'};color:${!il?'#fff':'var(--txl)'};transition:all .2s">Sign Up</button></div><div style="display:flex;flex-direction:column;gap:12px">${!il?'<div><label class="fi-label">Full Name</label><input id="lg-n" class="fi" placeholder="Enter your name"></div>':''}<div><label class="fi-label">${il?'Username or Email':'Email Address'}</label><input id="lg-e" class="fi" placeholder="${il?'Enter username or email':'your@email.com'}"></div>${!il?'<div><label class="fi-label">Phone Number</label><input id="lg-ph" class="fi" placeholder="+91 98765 43210"></div>':''}<div><label class="fi-label">Password</label><input id="lg-pw" class="fi" type="password" placeholder="Enter password"></div><button class="btn btn-g" style="width:100%;justify-content:center;padding:14px 0;font-size:15px;margin-top:6px;border-radius:14px" onclick="var e=document.getElementById('lg-e').value,pw=document.getElementById('lg-pw').value;if(${il}){if(e==='admin'&&pw==='jaishreekrishnaji'){S.usr={name:'Admin',email:'admin',role:'admin'};adminAuth();notify('Jai Shree Krishna 🙏 Welcome Admin!');go('admin');}else if(e&&pw){S.usr={name:e.split('@')[0],email:e,role:'customer'};notify('Welcome back!');go('home');}else notify('Please fill all fields');}else{var n=document.getElementById('lg-n')?.value;if(n&&e&&pw){S.usr={name:n,email:e,role:'customer'};notify('Account created! 🎉');go('home');}else notify('Please fill all fields');}">${il?'Sign In →':'Create Account →'}</button></div></div></div></div>`;}
+function login(){const il=window._lm!==false;return`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(135deg,#F5F0E5,#E8E0D0)"><div style="width:100%;max-width:400px"><div style="text-align:center;margin-bottom:28px"><h1 class="pf" style="font-size:32px">${il?'Welcome Back':'Join SHAHI'}</h1><p style="font-size:14px;color:var(--txl);margin-top:8px">${il?'Sign in to your account':'Create your free account today'}</p></div><div style="background:var(--w);border:1px solid var(--bd);border-radius:20px;padding:28px;box-shadow:0 10px 40px rgba(0,0,0,.06)"><div style="display:flex;border:2px solid var(--bd);border-radius:12px;overflow:hidden;margin-bottom:20px"><button onclick="window._lm=true;R()" style="flex:1;padding:12px 0;font-size:14px;font-weight:700;border:none;cursor:pointer;background:${il?'var(--g)':'transparent'};color:${il?'#fff':'var(--txl)'};transition:all .2s">Login</button><button onclick="window._lm=false;R()" style="flex:1;padding:12px 0;font-size:14px;font-weight:700;border:none;cursor:pointer;background:${!il?'var(--g)':'transparent'};color:${!il?'#fff':'var(--txl)'};transition:all .2s">Sign Up</button></div><div style="display:flex;flex-direction:column;gap:12px">${!il?'<div><label class="fi-label">Full Name</label><input id="lg-n" class="fi" placeholder="Enter your name"></div>':''}<div><label class="fi-label">${il?'Username or Email':'Email Address'}</label><input id="lg-e" class="fi" placeholder="${il?'Enter username or email':'your@email.com'}"></div>${!il?'<div><label class="fi-label">Phone Number</label><input id="lg-ph" class="fi" placeholder="+91 98765 43210"></div>':''}<div><label class="fi-label">Password</label><input id="lg-pw" class="fi" type="password" placeholder="Enter password"></div><button class="btn btn-g" style="width:100%;justify-content:center;padding:14px 0;font-size:15px;margin-top:6px;border-radius:14px" onclick="var e=document.getElementById('lg-e').value,pw=document.getElementById('lg-pw').value;if(${il}){if(e==='admin'&&pw==='jaishreekrishnaji'){S.usr={name:'Admin',email:'admin',role:'admin'};notify('Jai Shree Krishna 🙏 Welcome Admin!');go('admin');}else if(e&&pw){S.usr={name:e.split('@')[0],email:e,role:'customer'};notify('Welcome back!');go('home');}else notify('Please fill all fields');}else{var n=document.getElementById('lg-n')?.value;if(n&&e&&pw){S.usr={name:n,email:e,role:'customer'};notify('Account created! 🎉');go('home');}else notify('Please fill all fields');}">${il?'Sign In →':'Create Account →'}</button></div></div></div></div>`;}
 
 // ADMIN
 function admin(){if(!S.usr||S.usr.role!=='admin')return`<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--bg);gap:14px"><span style="font-size:52px">🔐</span><p style="color:var(--txl);font-size:15px">Admin access required</p><button class="btn btn-g" onclick="go('login')">Login as Admin</button></div>`;
