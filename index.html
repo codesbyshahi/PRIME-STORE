@@ -440,27 +440,33 @@ function initFB(){
 }
 async function loadDB(){
   if(!FB)return;try{
+    var initDoc=await db.collection('settings').doc('init').get();
+    var firstTime=!initDoc.exists;
     var ps=await db.collection('products').get();
     if(!ps.empty){
       S.products=ps.docs.map(d=>({...d.data(),id:d.id}));
       console.log('✅ Loaded '+ps.size+' products from Firebase');
-    }else{
-      console.log('📤 Firebase empty — auto-syncing products...');
+    }else if(firstTime){
+      console.log('📤 First time — syncing default products...');
       for(var i=0;i<S.products.length;i++){await db.collection('products').doc(String(S.products[i].id)).set(S.products[i]);}
       console.log('✅ '+S.products.length+' products synced!');
+    }else{
+      S.products=[];
+      console.log('📭 No products in Firebase (all deleted)');
     }
     var os=await db.collection('orders').get();
     if(!os.empty){S.ord=os.docs.map(d=>d.data()).sort(function(a,b){return(b.ts||0)-(a.ts||0);});console.log('✅ Loaded '+os.size+' orders');}
     var cs=await db.collection('coupons').get();
     if(!cs.empty){
       S.cp=cs.docs.map(d=>({...d.data(),id:d.id}));console.log('✅ Loaded '+cs.size+' coupons');
-    }else{
+    }else if(firstTime){
       for(var j=0;j<S.cp.length;j++){await db.collection('coupons').doc(String(S.cp[j].id)).set(S.cp[j]);}
       console.log('✅ Coupons synced!');
-    }
+    }else{S.cp=[];console.log('📭 No coupons');}
     var ts=await db.collection('settings').doc('theme').get();
     if(ts.exists){Object.assign(TH,ts.data());console.log('✅ Loaded theme');}
-    else{await db.collection('settings').doc('theme').set(TH);console.log('✅ Theme synced!');}
+    else if(firstTime){await db.collection('settings').doc('theme').set(TH);console.log('✅ Theme synced!');}
+    if(firstTime){await db.collection('settings').doc('init').set({done:true,ts:Date.now()});console.log('✅ Init flag set');}
     R();console.log('🔥 All data loaded from Firebase!');
   }catch(e){console.error('❌ Load error:',e);}
 }
